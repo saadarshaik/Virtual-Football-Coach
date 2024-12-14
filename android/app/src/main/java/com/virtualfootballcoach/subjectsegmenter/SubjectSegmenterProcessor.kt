@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
@@ -34,7 +35,8 @@ class SubjectSegmenterProcessor(private val context: Context) {
     fun processImage(imagePath: String): Task<String> {
         Log.d(TAG, "Starting processImage for path: $imagePath")
 
-        val originalBitmap = BitmapFactory.decodeFile(imagePath)
+        // Load and fix the rotation of the original image
+        val originalBitmap = fixImageRotation(imagePath)
         if (originalBitmap == null) {
             Log.e(TAG, "Failed to decode image at path: $imagePath")
             throw IOException("Invalid image path or format")
@@ -51,6 +53,42 @@ class SubjectSegmenterProcessor(private val context: Context) {
                 val processedImagePath = processSegmentationResult(segmentationResult, originalBitmap)
                 Tasks.forResult(processedImagePath)
             }
+    }
+
+    private fun fixImageRotation(imagePath: String): Bitmap? {
+        val bitmap = BitmapFactory.decodeFile(imagePath)
+        if (bitmap == null) {
+            Log.e(TAG, "Unable to decode image at path: $imagePath")
+            return null
+        }
+
+        try {
+            val exif = ExifInterface(imagePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+
+            val rotationDegrees = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+
+            if (rotationDegrees != 0f) {
+                val matrix = android.graphics.Matrix()
+                matrix.postRotate(rotationDegrees)
+                Log.d(TAG, "Rotating image by $rotationDegrees degrees")
+                return Bitmap.createBitmap(
+                    bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+                )
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Error reading EXIF data: ${e.message}")
+        }
+
+        return bitmap
     }
 
     private fun processSegmentationResult(

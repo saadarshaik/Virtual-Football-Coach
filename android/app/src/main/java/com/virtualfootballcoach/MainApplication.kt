@@ -11,6 +11,10 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import com.virtualfootballcoach.subjectsegmenter.SubjectSegmenterModule // Import the module
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,8 +22,12 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              // Add custom native module manually
+              add(object : ReactPackage {
+                override fun createNativeModules(reactContext: ReactApplicationContext) =
+                    listOf(SubjectSegmenterModule(reactContext)) // Add your SubjectSegmenterModule
+                override fun createViewManagers(reactContext: ReactApplicationContext) = emptyList<ViewManager<*, *>>()
+              })
             }
 
         override fun getJSMainModuleName(): String = "index"

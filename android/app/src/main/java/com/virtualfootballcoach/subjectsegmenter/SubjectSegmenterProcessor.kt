@@ -68,7 +68,7 @@ class SubjectSegmenterProcessor(private val context: Context) {
         val processedBitmap = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
         processedBitmap.eraseColor(android.graphics.Color.WHITE) // Set background to white
 
-        // Prepare a random color for each subject
+        // Prepare a unique random color for each subject
         val random = java.util.Random()
         val subjectColors = mutableListOf<Int>()
         for (subject in subjects) {
@@ -92,23 +92,22 @@ class SubjectSegmenterProcessor(private val context: Context) {
             val startY = subject.startY
             mask.rewind()
 
-            val subjectColor = subjectColors[index] // Get the random color for this subject
+            val subjectColor = subjectColors[index] // Get the unique color for this subject
 
             for (y in 0 until maskHeight) {
                 for (x in 0 until maskWidth) {
                     val confidence = mask.get()
                     val targetIndex = (startY + y) * imageWidth + (startX + x)
 
+                    // Apply the subject's color only where confidence is high (> 0.5)
                     if (confidence > 0.5f && targetIndex < processedPixels.size) {
                         processedPixels[targetIndex] = subjectColor
-                    } else if (targetIndex < processedPixels.size && processedPixels[targetIndex] == 0) {
-                        // Keep white background if no subject has colored this pixel yet
-                        processedPixels[targetIndex] = android.graphics.Color.WHITE
                     }
                 }
             }
         }
 
+        // Write the final pixels to the bitmap
         processedBitmap.setPixels(processedPixels, 0, imageWidth, 0, 0, imageWidth, imageHeight)
 
         // Save the processed image to a public directory

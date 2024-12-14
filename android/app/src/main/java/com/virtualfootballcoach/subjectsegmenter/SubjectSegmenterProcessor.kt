@@ -68,19 +68,8 @@ class SubjectSegmenterProcessor(private val context: Context) {
         val processedBitmap = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
         processedBitmap.eraseColor(android.graphics.Color.WHITE) // Set background to white
 
-        // Prepare a unique random color for each subject
-        val random = java.util.Random()
-        val subjectColors = mutableListOf<Int>()
-        for (subject in subjects) {
-            val randomColor = android.graphics.Color.argb(
-                150, // Alpha (translucency)
-                random.nextInt(256), // Red
-                random.nextInt(256), // Green
-                random.nextInt(256)  // Blue
-            )
-            subjectColors.add(randomColor)
-            Log.d(TAG, "Assigned color ${String.format("#%08X", randomColor)} to subject")
-        }
+        val originalPixels = IntArray(imageWidth * imageHeight)
+        originalBitmap.getPixels(originalPixels, 0, imageWidth, 0, 0, imageWidth, imageHeight)
 
         // Process each subject's mask
         val processedPixels = IntArray(imageWidth * imageHeight) // Final pixel array
@@ -92,16 +81,47 @@ class SubjectSegmenterProcessor(private val context: Context) {
             val startY = subject.startY
             mask.rewind()
 
-            val subjectColor = subjectColors[index] // Get the unique color for this subject
+            // Detect predominant color of the subject
+            var redCount = 0
+            var blueCount = 0
 
+            for (y in 0 until maskHeight) {
+                for (x in 0 until maskWidth) {
+                    val confidence = mask.get()
+                    if (confidence > 0.5f) {
+                        val pixelIndex = (startY + y) * imageWidth + (startX + x)
+                        if (pixelIndex < originalPixels.size) {
+                            val pixelColor = originalPixels[pixelIndex]
+                            val red = android.graphics.Color.red(pixelColor)
+                            val green = android.graphics.Color.green(pixelColor)
+                            val blue = android.graphics.Color.blue(pixelColor)
+
+                            // Simple thresholds for red and blue detection
+                            if (red > green && red > blue) redCount++
+                            if (blue > red && blue > green) blueCount++
+                        }
+                    }
+                }
+            }
+
+            // Determine the subject's overlay color based on predominant color
+            val overlayColor = when {
+                redCount > blueCount -> android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
+                blueCount > redCount -> android.graphics.Color.argb(150, 0, 0, 255) // Blue overlay
+                else -> android.graphics.Color.TRANSPARENT // Default for unclassified subjects
+            }
+
+            Log.d(TAG, "Subject $index: Red count = $redCount, Blue count = $blueCount, Overlay = ${String.format("#%08X", overlayColor)}")
+
+            // Apply the overlay color to the subject's mask
+            mask.rewind()
             for (y in 0 until maskHeight) {
                 for (x in 0 until maskWidth) {
                     val confidence = mask.get()
                     val targetIndex = (startY + y) * imageWidth + (startX + x)
 
-                    // Apply the subject's color only where confidence is high (> 0.5)
                     if (confidence > 0.5f && targetIndex < processedPixels.size) {
-                        processedPixels[targetIndex] = subjectColor
+                        processedPixels[targetIndex] = overlayColor
                     }
                 }
             }

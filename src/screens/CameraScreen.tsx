@@ -1,20 +1,48 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import { Camera, useCameraDevice } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// Define navigation types
+type RootStackParamList = {
+  CameraScreen: undefined;
+  ViewScreen: { photoPath: string };
+};
+
+type CameraScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'CameraScreen'
+>;
 
 const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   const device = useCameraDevice('back');
+  const cameraRef = useRef<Camera>(null);
+  const navigation = useNavigation<CameraScreenNavigationProp>(); // Add type for navigation
 
   useEffect(() => {
     (async () => {
       const status = await Camera.requestCameraPermission();
       setHasPermission(status === 'granted');
       if (status !== 'granted') {
-        Alert.alert("Permission Denied", "Camera access is required to use this feature.");
+        Alert.alert('Permission Denied', 'Camera access is required to use this feature.');
       }
     })();
   }, []);
+
+  const takePhoto = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo: PhotoFile = await cameraRef.current.takePhoto();
+        console.log('Captured Photo Path:', photo.path);
+        // Navigate to ViewScreen with the captured photo path
+        navigation.navigate('ViewScreen', { photoPath: photo.path });
+      } catch (error) {
+        Alert.alert('Error', 'Failed to take photo:');
+      }
+    }
+  };
 
   if (!device || !hasPermission) {
     return (
@@ -29,13 +57,15 @@ const CameraScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Camera
+        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={true}
+        photo={true}
       />
       <TouchableOpacity
         style={styles.captureButton}
-        onPress={() => Alert.alert('Capture', 'Feature coming soon!')}
+        onPress={takePhoto}
       >
         <Text style={styles.captureText}>Capture</Text>
       </TouchableOpacity>

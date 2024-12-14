@@ -1,29 +1,34 @@
-import React, { useState } from 'react';
-import { View, Button, StyleSheet, Text } from 'react-native';
-import HomeScreen from './src/screens/HomeScreen';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import CameraScreen from './src/screens/CameraScreen';
+import ViewScreen from './src/screens/ViewScreen';
 
-const App: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<'Home' | 'Camera'>('Home');
-
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'Home':
-        return <HomeScreen navigateToCamera={() => setCurrentScreen('Camera')} />;
-      case 'Camera':
-        return <CameraScreen navigateToHome={() => setCurrentScreen('Home')} />;
-      default:
-        return <Text>Error: Unknown Screen</Text>;
-    }
-  };
-
-  return <View style={styles.container}>{renderScreen()}</View>;
+// Define navigation types
+export type RootStackParamList = {
+  CameraScreen: undefined;
+  ViewScreen: { photoPath: string };
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
+const Stack = createStackNavigator<RootStackParamList>();
+
+const App: React.FC = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="CameraScreen">
+        <Stack.Screen
+          name="CameraScreen"
+          component={CameraScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ViewScreen"
+          component={ViewScreen}
+          options={{ title: 'View Photo' }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
 
 export default App;

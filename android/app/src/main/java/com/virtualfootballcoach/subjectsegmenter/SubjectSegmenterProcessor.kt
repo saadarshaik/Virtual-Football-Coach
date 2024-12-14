@@ -51,8 +51,8 @@ class SubjectSegmenterProcessor(private val context: Context) {
             .continueWithTask(executor) { task ->
                 val segmentationResult = task.result ?: throw Exception("Segmentation failed")
                 Log.d(TAG, "Segmentation completed successfully")
-                val positionAlerts = processSegmentationResult(segmentationResult, originalBitmap)
-                Tasks.forResult(positionAlerts)
+                val processedImagePath = processSegmentationResult(segmentationResult, originalBitmap)
+                Tasks.forResult(processedImagePath)
             }
     }
 
@@ -99,12 +99,23 @@ class SubjectSegmenterProcessor(private val context: Context) {
         val subjects = segmentationResult.subjects
         val imageWidth = originalBitmap.width
         val imageHeight = originalBitmap.height
-        val imageCenterX = imageWidth / 2
 
         Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
         Log.d(TAG, "Number of subjects: ${subjects.size}")
 
-        // Separate red and blue players and their bounding boxes
+        // Draw overlays directly on a copy of the original bitmap
+        val processedBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
+
+        val canvas = android.graphics.Canvas(processedBitmap)
+        val paintRed = android.graphics.Paint().apply {
+            color = android.graphics.Color.argb(150, 255, 0, 0) // Translucent red overlay
+            style = android.graphics.Paint.Style.FILL
+        }
+        val paintBlue = android.graphics.Paint().apply {
+            color = android.graphics.Color.argb(150, 0, 0, 255) // Translucent blue overlay
+            style = android.graphics.Paint.Style.FILL
+        }
+
         val redPlayers = mutableListOf<Pair<Rect, String>>()
         val bluePlayers = mutableListOf<Rect>()
 
@@ -143,54 +154,33 @@ class SubjectSegmenterProcessor(private val context: Context) {
             // Classify subject as red or blue based on pixel counts
             if (redCount > blueCount) {
                 redPlayers.add(boundingBox to "Subject $index")
+                canvas.drawRect(boundingBox, paintRed)
                 Log.d(TAG, "Red player detected: Subject $index")
             } else if (blueCount > redCount) {
                 bluePlayers.add(boundingBox)
+                canvas.drawRect(boundingBox, paintBlue)
                 Log.d(TAG, "Blue player detected: Subject $index")
             }
         }
 
-        // Identify free red players
-        val freeRedPlayers = mutableListOf<Pair<String, Rect>>()
-        for ((redBox, playerName) in redPlayers) {
-            var isCovered = false
-            for (blueBox in bluePlayers) {
-                if (Rect.intersects(redBox, blueBox)) {
-                    isCovered = true
-                    Log.d(TAG, "$playerName is covered by a blue player")
-                    break
-                }
+        // Save the processed image
+        val publicDirectory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ProcessedImages")
+        if (!publicDirectory.exists()) {
+            publicDirectory.mkdirs()
+            Log.d(TAG, "Created directory: ${publicDirectory.absolutePath}")
+        }
+
+        val outputFile = File(publicDirectory, "processed_image_${System.currentTimeMillis()}.png")
+        try {
+            FileOutputStream(outputFile).use { out ->
+                processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
-            if (!isCovered) {
-                freeRedPlayers.add(playerName to redBox)
-            }
+            Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
+            return outputFile.absolutePath
+        } catch (e: IOException) {
+            Log.e(TAG, "Error saving processed image: ${e.message}")
+            throw e
         }
-
-        // Determine the position of free red players relative to the camera POV
-        val positionAlerts = freeRedPlayers.map { (playerName, redBox) ->
-            val redCenterX = redBox.centerX()
-            val position = when {
-                redCenterX < imageCenterX - imageWidth / 8 -> "Left"
-                redCenterX > imageCenterX + imageWidth / 8 -> "Right"
-                redCenterX == imageCenterX -> "Center"
-                redCenterX < imageCenterX -> "Slightly Left"
-                else -> "Slightly Right"
-            }
-            "$playerName is free and located $position"
-        }
-
-        // Handle no free players case
-        if (positionAlerts.isEmpty()) {
-            Log.d(TAG, "No free red players detected")
-            return "No free red players detected."
-        }
-
-        // Log and return position alerts
-        for (alert in positionAlerts) {
-            Log.d(TAG, alert)
-        }
-
-        return positionAlerts.joinToString("\n")
     }
 
     companion object {

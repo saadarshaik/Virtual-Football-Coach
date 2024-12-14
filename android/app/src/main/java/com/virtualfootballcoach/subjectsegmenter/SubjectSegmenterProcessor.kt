@@ -3,6 +3,7 @@ package com.virtualfootballcoach.subjectsegmenter
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
@@ -98,19 +99,23 @@ class SubjectSegmenterProcessor(private val context: Context) {
         val subjects = segmentationResult.subjects
         val imageWidth = originalBitmap.width
         val imageHeight = originalBitmap.height
+        val imageCenterX = imageWidth / 2
 
         Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
         Log.d(TAG, "Number of subjects: ${subjects.size}")
 
-        // Create a bitmap for the final processed image
-        val processedBitmap = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
-        processedBitmap.eraseColor(android.graphics.Color.WHITE) // Set background to white
+        // Create a mutable copy of the original image for overlay
+        val processedBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
 
-        val originalPixels = IntArray(imageWidth * imageHeight)
-        originalBitmap.getPixels(originalPixels, 0, imageWidth, 0, 0, imageWidth, imageHeight)
+        val canvas = android.graphics.Canvas(processedBitmap)
+        val paint = android.graphics.Paint().apply {
+            style = android.graphics.Paint.Style.FILL
+        }
 
-        // Process each subject's mask
-        val processedPixels = IntArray(imageWidth * imageHeight) // Final pixel array
+        val redPlayers = mutableListOf<Pair<Rect, String>>()
+        val bluePlayers = mutableListOf<Rect>()
+
+        // Analyze each subject's mask and classify as red or blue
         for ((index, subject) in subjects.withIndex()) {
             val mask = subject.confidenceMask ?: continue
             val maskWidth = subject.width
@@ -119,56 +124,102 @@ class SubjectSegmenterProcessor(private val context: Context) {
             val startY = subject.startY
             mask.rewind()
 
-            // Detect predominant color of the subject
             var redCount = 0
             var blueCount = 0
+            val boundingBox = Rect(startX, startY, startX + maskWidth, startY + maskHeight)
 
             for (y in 0 until maskHeight) {
                 for (x in 0 until maskWidth) {
                     val confidence = mask.get()
                     if (confidence > 0.5f) {
-                        val pixelIndex = (startY + y) * imageWidth + (startX + x)
-                        if (pixelIndex < originalPixels.size) {
-                            val pixelColor = originalPixels[pixelIndex]
-                            val red = android.graphics.Color.red(pixelColor)
-                            val green = android.graphics.Color.green(pixelColor)
-                            val blue = android.graphics.Color.blue(pixelColor)
+                        val pixelX = startX + x
+                        val pixelY = startY + y
+                        val pixelColor = originalBitmap.getPixel(pixelX, pixelY)
+                        val red = android.graphics.Color.red(pixelColor)
+                        val green = android.graphics.Color.green(pixelColor)
+                        val blue = android.graphics.Color.blue(pixelColor)
 
-                            // Simple thresholds for red and blue detection
-                            if (red > green && red > blue) redCount++
-                            if (blue > red && blue > green) blueCount++
+                        if (red > green && red > blue) redCount++
+                        if (blue > red && blue > green) blueCount++
+                    }
+                }
+            }
+
+            // Classify subject as red or blue based on pixel counts
+            if (redCount > blueCount) {
+                redPlayers.add(boundingBox to "Subject $index")
+                paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
+                mask.rewind()
+                for (y in 0 until maskHeight) {
+                    for (x in 0 until maskWidth) {
+                        val confidence = mask.get()
+                        if (confidence > 0.5f) {
+                            val pixelX = startX + x
+                            val pixelY = startY + y
+                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
                         }
                     }
                 }
-            }
-
-            // Determine the subject's overlay color based on predominant color
-            val overlayColor = when {
-                redCount > blueCount -> android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
-                blueCount > redCount -> android.graphics.Color.argb(150, 0, 0, 255) // Blue overlay
-                else -> android.graphics.Color.TRANSPARENT // Default for unclassified subjects
-            }
-
-            Log.d(TAG, "Subject $index: Red count = $redCount, Blue count = $blueCount, Overlay = ${String.format("#%08X", overlayColor)}")
-
-            // Apply the overlay color to the subject's mask
-            mask.rewind()
-            for (y in 0 until maskHeight) {
-                for (x in 0 until maskWidth) {
-                    val confidence = mask.get()
-                    val targetIndex = (startY + y) * imageWidth + (startX + x)
-
-                    if (confidence > 0.5f && targetIndex < processedPixels.size) {
-                        processedPixels[targetIndex] = overlayColor
+                Log.d(TAG, "Red player detected: Subject $index")
+            } else if (blueCount > redCount) {
+                bluePlayers.add(boundingBox)
+                paint.color = android.graphics.Color.argb(150, 0, 0, 255) // Blue overlay
+                mask.rewind()
+                for (y in 0 until maskHeight) {
+                    for (x in 0 until maskWidth) {
+                        val confidence = mask.get()
+                        if (confidence > 0.5f) {
+                            val pixelX = startX + x
+                            val pixelY = startY + y
+                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
+                        }
                     }
                 }
+                Log.d(TAG, "Blue player detected: Subject $index")
             }
         }
 
-        // Write the final pixels to the bitmap
-        processedBitmap.setPixels(processedPixels, 0, imageWidth, 0, 0, imageWidth, imageHeight)
+        // Identify free red players
+        val freeRedPlayers = mutableListOf<Pair<String, Rect>>()
+        for ((redBox, playerName) in redPlayers) {
+            var isCovered = false
+            for (blueBox in bluePlayers) {
+                if (Rect.intersects(redBox, blueBox)) {
+                    isCovered = true
+                    Log.d(TAG, "$playerName is covered by a blue player")
+                    break
+                }
+            }
+            if (!isCovered) {
+                freeRedPlayers.add(playerName to redBox)
+            }
+        }
 
-        // Save the processed image to a public directory
+        // Determine the position of free red players relative to the camera POV
+        val positionAlerts = freeRedPlayers.map { (playerName, redBox) ->
+            val redCenterX = redBox.centerX()
+            val position = when {
+                redCenterX < imageCenterX - imageWidth / 8 -> "Left"
+                redCenterX > imageCenterX + imageWidth / 8 -> "Right"
+                redCenterX == imageCenterX -> "Center"
+                redCenterX < imageCenterX -> "Slightly Left"
+                else -> "Slightly Right"
+            }
+            "$playerName is free and located $position"
+        }
+
+        // Handle no free players case
+        if (positionAlerts.isEmpty()) {
+            Log.d(TAG, "No free red players detected")
+            return "No free red players detected."
+        }
+
+        // Log and return position alerts
+        for (alert in positionAlerts) {
+            Log.d(TAG, alert)
+        }
+
+        // Save the processed image
         val publicDirectory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ProcessedImages")
         if (!publicDirectory.exists()) {
             publicDirectory.mkdirs()
@@ -181,7 +232,7 @@ class SubjectSegmenterProcessor(private val context: Context) {
                 processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
             Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
-            return outputFile.absolutePath
+            return positionAlerts.joinToString("\n") + "\nSaved at: ${outputFile.absolutePath}"
         } catch (e: IOException) {
             Log.e(TAG, "Error saving processed image: ${e.message}")
             throw e

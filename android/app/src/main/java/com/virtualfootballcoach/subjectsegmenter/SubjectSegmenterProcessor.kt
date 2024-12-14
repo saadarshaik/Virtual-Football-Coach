@@ -64,24 +64,45 @@ class SubjectSegmenterProcessor(private val context: Context) {
         Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
         Log.d(TAG, "Number of subjects: ${subjects.size}")
 
+        // Create a bitmap for the final processed image
         val processedBitmap = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
-        processedBitmap.eraseColor(android.graphics.Color.WHITE)
+        processedBitmap.eraseColor(android.graphics.Color.WHITE) // Set background to white
 
-        val processedPixels = IntArray(imageWidth * imageHeight)
-
+        // Prepare a random color for each subject
+        val random = java.util.Random()
+        val subjectColors = mutableListOf<Int>()
         for (subject in subjects) {
+            val randomColor = android.graphics.Color.argb(
+                150, // Alpha (translucency)
+                random.nextInt(256), // Red
+                random.nextInt(256), // Green
+                random.nextInt(256)  // Blue
+            )
+            subjectColors.add(randomColor)
+            Log.d(TAG, "Assigned color ${String.format("#%08X", randomColor)} to subject")
+        }
+
+        // Process each subject's mask
+        val processedPixels = IntArray(imageWidth * imageHeight) // Final pixel array
+        for ((index, subject) in subjects.withIndex()) {
             val mask = subject.confidenceMask ?: continue
             val maskWidth = subject.width
             val maskHeight = subject.height
+            val startX = subject.startX
+            val startY = subject.startY
             mask.rewind()
+
+            val subjectColor = subjectColors[index] // Get the random color for this subject
 
             for (y in 0 until maskHeight) {
                 for (x in 0 until maskWidth) {
                     val confidence = mask.get()
-                    val targetIndex = (subject.startY + y) * imageWidth + (subject.startX + x)
+                    val targetIndex = (startY + y) * imageWidth + (startX + x)
+
                     if (confidence > 0.5f && targetIndex < processedPixels.size) {
-                        processedPixels[targetIndex] = android.graphics.Color.argb(150, 0, 0, 255)
-                    } else if (targetIndex < processedPixels.size) {
+                        processedPixels[targetIndex] = subjectColor
+                    } else if (targetIndex < processedPixels.size && processedPixels[targetIndex] == 0) {
+                        // Keep white background if no subject has colored this pixel yet
                         processedPixels[targetIndex] = android.graphics.Color.WHITE
                     }
                 }

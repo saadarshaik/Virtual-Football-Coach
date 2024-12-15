@@ -35,6 +35,7 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
 
     private val executor: Executor = Executors.newSingleThreadExecutor()
     private var textToSpeech: TextToSpeech? = null
+    private var currentLanguage: Locale = Locale.US // Default to English
 
     init {
         // Initialize Text-to-Speech
@@ -43,10 +44,29 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            textToSpeech?.language = Locale.US
-            Log.d(TAG, "Text-to-Speech initialized successfully")
+            val result = textToSpeech?.setLanguage(currentLanguage)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.e(TAG, "Language not supported: $currentLanguage")
+            } else {
+                Log.d(TAG, "Text-to-Speech initialized successfully with language: $currentLanguage")
+            }
         } else {
             Log.e(TAG, "Failed to initialize Text-to-Speech")
+        }
+    }
+
+    /**
+     * Dynamically change the Text-to-Speech language
+     * @param languageCode ISO 639 language code (e.g., "en" for English, "ar" for Arabic)
+     */
+    fun setLanguage(languageCode: String) {
+        val locale = Locale(languageCode)
+        val result = textToSpeech?.setLanguage(locale)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.e(TAG, "Language not supported: $languageCode")
+        } else {
+            currentLanguage = locale
+            Log.d(TAG, "Language set to: $languageCode")
         }
     }
 
@@ -228,16 +248,16 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         val directions = freeRedPlayers.map { (playerName, redBox) ->
             val redCenterX = redBox.centerX()
             when {
-                redCenterX < imageCenterX - imageWidth / 8 -> "pass left"
-                redCenterX > imageCenterX + imageWidth / 8 -> "pass right"
-                redCenterX == imageCenterX -> "pass forwards"
-                redCenterX < imageCenterX -> "pass slightly left"
-                else -> "pass slightly right"
+                redCenterX < imageCenterX - imageWidth / 8 -> translateFeedback("pass left")
+                redCenterX > imageCenterX + imageWidth / 8 -> translateFeedback("pass right")
+                redCenterX == imageCenterX -> translateFeedback("pass forwards")
+                redCenterX < imageCenterX -> translateFeedback("pass slightly left")
+                else -> translateFeedback("pass slightly right")
             }
         }
 
         val feedback = when {
-            directions.isEmpty() -> "No players free, keep the ball"
+            directions.isEmpty() -> translateFeedback("No players free, keep the ball")
             directions.size == 1 -> directions[0]
             else -> directions.joinToString(" or ")
         }
@@ -259,6 +279,23 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         } catch (e: IOException) {
             Log.e(TAG, "Error saving processed image: ${e.message}")
             throw e
+        }
+    }
+
+    private fun translateFeedback(feedback: String): String {
+        return when (currentLanguage.language) {
+            "ar" -> { // Arabic translations
+                when (feedback) {
+                    "pass left" -> "تمرير إلى اليسار"
+                    "pass right" -> "تمرير إلى اليمين"
+                    "pass forwards" -> "تمرير إلى الأمام"
+                    "pass slightly left" -> "تمرير قليلاً إلى اليسار"
+                    "pass slightly right" -> "تمرير قليلاً إلى اليمين"
+                    "No players free, keep the ball" -> "لا يوجد لاعبين أحرار، احتفظ بالكرة"
+                    else -> feedback // Default to original if not translated
+                }
+            }
+            else -> feedback // Default to English
         }
     }
 

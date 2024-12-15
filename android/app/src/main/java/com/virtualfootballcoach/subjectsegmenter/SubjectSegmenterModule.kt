@@ -38,4 +38,14 @@ class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactConte
             promise.reject("ProcessImageError", e.message, e)
         }
     }
+
+    @ReactMethod
+    fun setLanguage(languageCode: String, promise: Promise) {
+        try {
+            processor.setLanguage(languageCode)
+            promise.resolve("Language set to $languageCode")
+        } catch (e: Exception) {
+            promise.reject("SetLanguageError", e.message, e)
+        }
+    }
 }

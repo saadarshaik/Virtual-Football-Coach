@@ -2,9 +2,15 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Text, Image, Alert } from 'react-native';
 import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
 import { NativeModules } from 'react-native';
+import { useRoute, RouteProp } from '@react-navigation/native';
 
-// Import the native module
 const { SubjectSegmenterModule } = NativeModules;
+
+type RootStackParamList = {
+  CameraScreen: { language: 'en' | 'ar' };
+};
+
+type CameraScreenRouteProp = RouteProp<RootStackParamList, 'CameraScreen'>;
 
 const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
@@ -12,6 +18,15 @@ const CameraScreen: React.FC = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const cameraRef = useRef<Camera>(null);
   const device = useCameraDevice('back');
+  const route = useRoute<CameraScreenRouteProp>();
+  const { language } = route.params; // Get language from route params
+
+  useEffect(() => {
+    // Set the language in the native module
+    SubjectSegmenterModule.setLanguage(language)
+      .then(() => console.log(`Language set to ${language}`))
+      .catch((error: Error) => console.error('Failed to set language:', error));
+  }, [language]);
 
   useEffect(() => {
     // Request camera permissions
@@ -25,7 +40,7 @@ const CameraScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Set interval to capture and process an image every 5 seconds
+    // Set interval to capture and process an image every 3 seconds
     const interval = setInterval(() => {
       captureAndProcessImage();
     }, 3000);
@@ -45,7 +60,7 @@ const CameraScreen: React.FC = () => {
             setFeedback(result.feedback); // Set feedback for the user
             setProcessedImagePath(result.filePath); // Display the processed image
 
-            // Clear feedback after 1 seconds
+            // Clear feedback after 1 second
             setTimeout(() => {
               setFeedback(null);
             }, 1000);
@@ -83,7 +98,9 @@ const CameraScreen: React.FC = () => {
       {/* Feedback Overlay */}
       {feedback && (
         <View style={styles.feedbackContainer}>
-          <Text style={styles.feedbackText}>{feedback}</Text>
+          <Text style={styles.feedbackText}>
+            {language === 'en' ? feedback : translateFeedbackToArabic(feedback)}
+          </Text>
         </View>
       )}
 
@@ -96,6 +113,18 @@ const CameraScreen: React.FC = () => {
       )}
     </View>
   );
+};
+
+const translateFeedbackToArabic = (feedback: string): string => {
+  const translations: { [key: string]: string } = {
+    'pass left': 'تمرير إلى اليسار',
+    'pass right': 'تمرير إلى اليمين',
+    'pass forwards': 'تمرير إلى الأمام',
+    'pass slightly left': 'تمرير قليلاً إلى اليسار',
+    'pass slightly right': 'تمرير قليلاً إلى اليمين',
+    'No players free, keep the ball': 'لا يوجد لاعبين أحرار، احتفظ بالكرة',
+  };
+  return translations[feedback] || feedback;
 };
 
 const styles = StyleSheet.create({

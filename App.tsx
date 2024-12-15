@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 
-// Define navigation types
 export type RootStackParamList = {
-  CameraScreen: undefined;
+  HomeScreen: undefined;
+  CameraScreen: { language: 'en' | 'ar' };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -13,11 +14,16 @@ const Stack = createStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="CameraScreen">
+      <Stack.Navigator initialRouteName="HomeScreen">
+        <Stack.Screen
+          name="HomeScreen"
+          component={HomeScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen
           name="CameraScreen"
           component={CameraScreen}
-          options={{ headerShown: false }}
+          options={{ title: 'Camera' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+<<<<<<< HEAD
+import android.speech.tts.TextToSpeech
+=======
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
@@ -16,10 +20,11 @@ import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.*
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
-class SubjectSegmenterProcessor(private val context: Context) {
+class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnInitListener {
 
     private val subjectSegmenter: SubjectSegmenter = SubjectSegmentation.getClient(
         SubjectSegmenterOptions.Builder()
@@ -32,8 +37,23 @@ class SubjectSegmenterProcessor(private val context: Context) {
     )
 
     private val executor: Executor = Executors.newSingleThreadExecutor()
+    private var textToSpeech: TextToSpeech? = null
 
-    fun processImage(imagePath: String): Task<String> {
+    init {
+        // Initialize Text-to-Speech
+        textToSpeech = TextToSpeech(context, this)
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            textToSpeech?.language = Locale.US
+            Log.d(TAG, "Text-to-Speech initialized successfully")
+        } else {
+            Log.e(TAG, "Failed to initialize Text-to-Speech")
+        }
+    }
+
+    fun processImage(imagePath: String): Task<Pair<String, String>> {
         Log.d(TAG, "Starting processImage for path: $imagePath")
 
         // Load and fix the rotation of the original image
@@ -51,8 +71,13 @@ class SubjectSegmenterProcessor(private val context: Context) {
             .continueWithTask(executor) { task ->
                 val segmentationResult = task.result ?: throw Exception("Segmentation failed")
                 Log.d(TAG, "Segmentation completed successfully")
-                val processedImagePath = processSegmentationResult(segmentationResult, originalBitmap)
-                Tasks.forResult(processedImagePath)
+
+                val (feedback, processedImagePath) = processSegmentationResult(segmentationResult, originalBitmap)
+
+                // Speak only the feedback
+                textToSpeech?.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null)
+
+                Tasks.forResult(feedback to processedImagePath)
             }
     }
 
@@ -95,7 +120,7 @@ class SubjectSegmenterProcessor(private val context: Context) {
     private fun processSegmentationResult(
         segmentationResult: SubjectSegmentationResult,
         originalBitmap: Bitmap
-    ): String {
+    ): Pair<String, String> {
         val subjects = segmentationResult.subjects
         val imageWidth = originalBitmap.width
         val imageHeight = originalBitmap.height
@@ -111,11 +136,18 @@ class SubjectSegmenterProcessor(private val context: Context) {
         val paint = android.graphics.Paint().apply {
             style = android.graphics.Paint.Style.FILL
         }
+<<<<<<< HEAD
+
+        val redPlayers = mutableListOf<Pair<Rect, String>>()
+        val bluePlayers = mutableListOf<Rect>()
+
+=======
 
         val redPlayers = mutableListOf<Pair<Rect, String>>()
         val bluePlayers = mutableListOf<Rect>()
 
         // Analyze each subject's mask and classify as red or blue
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
         for ((index, subject) in subjects.withIndex()) {
             val mask = subject.confidenceMask ?: continue
             val maskWidth = subject.width
@@ -145,7 +177,10 @@ class SubjectSegmenterProcessor(private val context: Context) {
                 }
             }
 
+<<<<<<< HEAD
+=======
             // Classify subject as red or blue based on pixel counts
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
             if (redCount > blueCount) {
                 redPlayers.add(boundingBox to "Subject $index")
                 paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
@@ -179,7 +214,10 @@ class SubjectSegmenterProcessor(private val context: Context) {
             }
         }
 
+<<<<<<< HEAD
+=======
         // Identify free red players
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
         val freeRedPlayers = mutableListOf<Pair<String, Rect>>()
         for ((redBox, playerName) in redPlayers) {
             var isCovered = false
@@ -195,6 +233,23 @@ class SubjectSegmenterProcessor(private val context: Context) {
             }
         }
 
+<<<<<<< HEAD
+        val directions = freeRedPlayers.map { (playerName, redBox) ->
+            val redCenterX = redBox.centerX()
+            when {
+                redCenterX < imageCenterX - imageWidth / 8 -> "pass left"
+                redCenterX > imageCenterX + imageWidth / 8 -> "pass right"
+                redCenterX == imageCenterX -> "pass forwards"
+                redCenterX < imageCenterX -> "pass slightly left"
+                else -> "pass slightly right"
+            }
+        }
+
+        val feedback = when {
+            directions.isEmpty() -> "No players free, keep the ball"
+            directions.size == 1 -> directions[0]
+            else -> directions.joinToString(" or ")
+=======
         // Determine the position of free red players relative to the camera POV
         val positionAlerts = freeRedPlayers.map { (playerName, redBox) ->
             val redCenterX = redBox.centerX()
@@ -217,6 +272,7 @@ class SubjectSegmenterProcessor(private val context: Context) {
         // Log and return position alerts
         for (alert in positionAlerts) {
             Log.d(TAG, alert)
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
         }
 
         // Save the processed image
@@ -232,7 +288,11 @@ class SubjectSegmenterProcessor(private val context: Context) {
                 processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
             Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
+<<<<<<< HEAD
+            return feedback to outputFile.absolutePath
+=======
             return positionAlerts.joinToString("\n") + "\nSaved at: ${outputFile.absolutePath}"
+>>>>>>> 08261997be766177e82245a42bc584f02344c598
         } catch (e: IOException) {
             Log.e(TAG, "Error saving processed image: ${e.message}")
             throw e

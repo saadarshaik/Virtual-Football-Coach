@@ -1,27 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, Text, Image, Alert } from 'react-native';
 import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeModules } from 'react-native';
 
-// Define navigation types
-type RootStackParamList = {
-  CameraScreen: undefined;
-  ViewScreen: { photoPath: string };
-};
-
-type CameraScreenNavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  'CameraScreen'
->;
+// Import the native module
+const { SubjectSegmenterModule } = NativeModules;
 
 const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
-  const device = useCameraDevice('back');
+  const [processedImagePath, setProcessedImagePath] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const cameraRef = useRef<Camera>(null);
-  const navigation = useNavigation<CameraScreenNavigationProp>(); // Add type for navigation
+  const device = useCameraDevice('back');
 
   useEffect(() => {
+    // Request camera permissions
     (async () => {
       const status = await Camera.requestCameraPermission();
       setHasPermission(status === 'granted');
@@ -31,15 +24,37 @@ const CameraScreen: React.FC = () => {
     })();
   }, []);
 
-  const takePhoto = async () => {
+  useEffect(() => {
+    // Set interval to capture and process an image every 5 seconds
+    const interval = setInterval(() => {
+      captureAndProcessImage();
+    }, 5000);
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
+
+  const captureAndProcessImage = async () => {
     if (cameraRef.current) {
       try {
+        // Capture the photo
         const photo: PhotoFile = await cameraRef.current.takePhoto();
-        console.log('Captured Photo Path:', photo.path);
-        // Navigate to ViewScreen with the captured photo path
-        navigation.navigate('ViewScreen', { photoPath: photo.path });
+
+        // Process the image using the native module
+        SubjectSegmenterModule.processImage(photo.path)
+          .then((result: { feedback: string; filePath: string }) => {
+            setFeedback(result.feedback); // Set feedback for the user
+            setProcessedImagePath(result.filePath); // Display the processed image
+
+            // Clear feedback after 2 seconds
+            setTimeout(() => {
+              setFeedback(null);
+            }, 2000);
+          })
+          .catch((error: Error) => {
+            Alert.alert('Error', `Failed to process image: ${error.message}`);
+          });
       } catch (error) {
-        Alert.alert('Error', 'Failed to take photo:');
+        Alert.alert('Error', 'Failed to capture photo.');
       }
     }
   };
@@ -56,6 +71,7 @@ const CameraScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Camera View */}
       <Camera
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
@@ -63,12 +79,21 @@ const CameraScreen: React.FC = () => {
         isActive={true}
         photo={true}
       />
-      <TouchableOpacity
-        style={styles.captureButton}
-        onPress={takePhoto}
-      >
-        <Text style={styles.captureText}>Capture</Text>
-      </TouchableOpacity>
+
+      {/* Feedback Overlay */}
+      {feedback && (
+        <View style={styles.feedbackContainer}>
+          <Text style={styles.feedbackText}>{feedback}</Text>
+        </View>
+      )}
+
+      {/* Processed Image Overlay */}
+      {processedImagePath && (
+        <Image
+          source={{ uri: `file://${processedImagePath}` }}
+          style={styles.processedImage}
+        />
+      )}
     </View>
   );
 };
@@ -77,27 +102,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   message: {
     color: 'white',
     fontSize: 18,
     textAlign: 'center',
   },
-  captureButton: {
+  feedbackContainer: {
     position: 'absolute',
-    bottom: 50,
-    width: 80,
-    height: 80,
-    backgroundColor: 'white',
-    borderRadius: 40,
-    justifyContent: 'center',
+    bottom: 20,
+    width: '100%',
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
   },
-  captureText: {
-    color: 'black',
-    fontWeight: 'bold',
+  feedbackText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  processedImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
   },
 });
 

@@ -50,7 +50,7 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         }
     }
 
-    fun processImage(imagePath: String): Task<String> {
+    fun processImage(imagePath: String): Task<Pair<String, String>> {
         Log.d(TAG, "Starting processImage for path: $imagePath")
 
         // Load and fix the rotation of the original image
@@ -68,9 +68,13 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             .continueWithTask(executor) { task ->
                 val segmentationResult = task.result ?: throw Exception("Segmentation failed")
                 Log.d(TAG, "Segmentation completed successfully")
-                val feedback = processSegmentationResult(segmentationResult, originalBitmap)
-                textToSpeech?.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null) // Speak feedback
-                Tasks.forResult(feedback)
+
+                val (feedback, processedImagePath) = processSegmentationResult(segmentationResult, originalBitmap)
+
+                // Speak only the feedback
+                textToSpeech?.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null)
+
+                Tasks.forResult(feedback to processedImagePath)
             }
     }
 
@@ -113,7 +117,7 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
     private fun processSegmentationResult(
         segmentationResult: SubjectSegmentationResult,
         originalBitmap: Bitmap
-    ): String {
+    ): Pair<String, String> {
         val subjects = segmentationResult.subjects
         val imageWidth = originalBitmap.width
         val imageHeight = originalBitmap.height
@@ -121,6 +125,14 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
 
         Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
         Log.d(TAG, "Number of subjects: ${subjects.size}")
+
+        // Create a mutable copy of the original image for overlay
+        val processedBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
+
+        val canvas = android.graphics.Canvas(processedBitmap)
+        val paint = android.graphics.Paint().apply {
+            style = android.graphics.Paint.Style.FILL
+        }
 
         val redPlayers = mutableListOf<Pair<Rect, String>>()
         val bluePlayers = mutableListOf<Rect>()
@@ -156,9 +168,33 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
 
             if (redCount > blueCount) {
                 redPlayers.add(boundingBox to "Subject $index")
+                paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
+                mask.rewind()
+                for (y in 0 until maskHeight) {
+                    for (x in 0 until maskWidth) {
+                        val confidence = mask.get()
+                        if (confidence > 0.5f) {
+                            val pixelX = startX + x
+                            val pixelY = startY + y
+                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
+                        }
+                    }
+                }
                 Log.d(TAG, "Red player detected: Subject $index")
             } else if (blueCount > redCount) {
                 bluePlayers.add(boundingBox)
+                paint.color = android.graphics.Color.argb(150, 0, 0, 255) // Blue overlay
+                mask.rewind()
+                for (y in 0 until maskHeight) {
+                    for (x in 0 until maskWidth) {
+                        val confidence = mask.get()
+                        if (confidence > 0.5f) {
+                            val pixelX = startX + x
+                            val pixelY = startY + y
+                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
+                        }
+                    }
+                }
                 Log.d(TAG, "Blue player detected: Subject $index")
             }
         }
@@ -195,8 +231,24 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             else -> directions.joinToString(" or ")
         }
 
-        Log.d(TAG, "Feedback generated: $feedback")
-        return feedback
+        // Save the processed image
+        val publicDirectory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ProcessedImages")
+        if (!publicDirectory.exists()) {
+            publicDirectory.mkdirs()
+            Log.d(TAG, "Created directory: ${publicDirectory.absolutePath}")
+        }
+
+        val outputFile = File(publicDirectory, "processed_image_${System.currentTimeMillis()}.png")
+        try {
+            FileOutputStream(outputFile).use { out ->
+                processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
+            return feedback to outputFile.absolutePath
+        } catch (e: IOException) {
+            Log.e(TAG, "Error saving processed image: ${e.message}")
+            throw e
+        }
     }
 
     companion object {

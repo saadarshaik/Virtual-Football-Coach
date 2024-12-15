@@ -1,10 +1,10 @@
 package com.virtualfootballcoach.subjectsegmenter
 
-import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.Arguments
 import com.google.android.gms.tasks.OnFailureListener
 import com.google.android.gms.tasks.OnSuccessListener
 
@@ -18,20 +18,24 @@ class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactConte
 
     @ReactMethod
     fun processImage(imagePath: String, promise: Promise) {
-        Log.d(TAG, "processImage invoked with path: $imagePath")
+        try {
+            processor.processImage(imagePath)
+                .addOnSuccessListener { result ->
+                    val feedback = result.first // Extract feedback
+                    val filePath = result.second // Extract file path
 
-        processor.processImage(imagePath)
-            .addOnSuccessListener { processedImagePath ->
-                Log.d(TAG, "Image processing completed successfully. Saved at: $processedImagePath")
-                promise.resolve(processedImagePath)
-            }
-            .addOnFailureListener { exception ->
-                Log.e(TAG, "Image processing failed: ${exception.message}")
-                promise.reject("ProcessImageError", exception.message, exception)
-            }
-    }
+                    // Create a WritableMap to pass both feedback and filePath
+                    val resultMap = Arguments.createMap()
+                    resultMap.putString("feedback", feedback)
+                    resultMap.putString("filePath", filePath)
 
-    companion object {
-        private const val TAG = "SubjectSegmenterModule"
+                    promise.resolve(resultMap) // Return the map to React Native
+                }
+                .addOnFailureListener { exception ->
+                    promise.reject("ProcessImageError", exception.message, exception)
+                }
+        } catch (e: Exception) {
+            promise.reject("ProcessImageError", e.message, e)
+        }
     }
 }

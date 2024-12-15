@@ -53,8 +53,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
     fun processImage(imagePath: String): Task<Pair<String, String>> {
         Log.d(TAG, "Starting processImage for path: $imagePath")
 
-        // Load and fix the rotation of the original image
-        val originalBitmap = fixImageRotation(imagePath)
+        // Load and resize the image with rotation correction
+        val originalBitmap = fixImageRotation(imagePath, targetWidth = 640, targetHeight = 480)
         if (originalBitmap == null) {
             Log.e(TAG, "Failed to decode image at path: $imagePath")
             throw IOException("Invalid image path or format")
@@ -78,8 +78,19 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             }
     }
 
-    private fun fixImageRotation(imagePath: String): Bitmap? {
-        val bitmap = BitmapFactory.decodeFile(imagePath)
+    private fun fixImageRotation(imagePath: String, targetWidth: Int, targetHeight: Int): Bitmap? {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(imagePath, options)
+
+        // Calculate the scaling factor
+        val scaleFactor = Math.max(options.outWidth / targetWidth, options.outHeight / targetHeight)
+
+        // Decode the image with scaling
+        val resizedOptions = BitmapFactory.Options().apply {
+            inSampleSize = scaleFactor
+            inScaled = true
+        }
+        val bitmap = BitmapFactory.decodeFile(imagePath, resizedOptions)
         if (bitmap == null) {
             Log.e(TAG, "Unable to decode image at path: $imagePath")
             return null

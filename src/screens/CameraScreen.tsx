@@ -28,7 +28,7 @@ const CameraScreen: React.FC = () => {
     // Set interval to capture and process an image every 5 seconds
     const interval = setInterval(() => {
       captureAndProcessImage();
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(interval); // Cleanup on unmount
   }, []);
@@ -45,10 +45,10 @@ const CameraScreen: React.FC = () => {
             setFeedback(result.feedback); // Set feedback for the user
             setProcessedImagePath(result.filePath); // Display the processed image
 
-            // Clear feedback after 2 seconds
+            // Clear feedback after 1 seconds
             setTimeout(() => {
               setFeedback(null);
-            }, 2000);
+            }, 1000);
           })
           .catch((error: Error) => {
             Alert.alert('Error', `Failed to process image: ${error.message}`);

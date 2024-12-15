@@ -4,10 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
-<<<<<<< HEAD
 import android.speech.tts.TextToSpeech
-=======
->>>>>>> 08261997be766177e82245a42bc584f02344c598
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
@@ -136,18 +133,10 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         val paint = android.graphics.Paint().apply {
             style = android.graphics.Paint.Style.FILL
         }
-<<<<<<< HEAD
 
         val redPlayers = mutableListOf<Pair<Rect, String>>()
         val bluePlayers = mutableListOf<Rect>()
 
-=======
-
-        val redPlayers = mutableListOf<Pair<Rect, String>>()
-        val bluePlayers = mutableListOf<Rect>()
-
-        // Analyze each subject's mask and classify as red or blue
->>>>>>> 08261997be766177e82245a42bc584f02344c598
         for ((index, subject) in subjects.withIndex()) {
             val mask = subject.confidenceMask ?: continue
             val maskWidth = subject.width
@@ -177,10 +166,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
                 }
             }
 
-<<<<<<< HEAD
-=======
-            // Classify subject as red or blue based on pixel counts
->>>>>>> 08261997be766177e82245a42bc584f02344c598
             if (redCount > blueCount) {
                 redPlayers.add(boundingBox to "Subject $index")
                 paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
@@ -214,10 +199,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             }
         }
 
-<<<<<<< HEAD
-=======
-        // Identify free red players
->>>>>>> 08261997be766177e82245a42bc584f02344c598
         val freeRedPlayers = mutableListOf<Pair<String, Rect>>()
         for ((redBox, playerName) in redPlayers) {
             var isCovered = false
@@ -233,7 +214,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             }
         }
 
-<<<<<<< HEAD
         val directions = freeRedPlayers.map { (playerName, redBox) ->
             val redCenterX = redBox.centerX()
             when {
@@ -249,30 +229,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             directions.isEmpty() -> "No players free, keep the ball"
             directions.size == 1 -> directions[0]
             else -> directions.joinToString(" or ")
-=======
-        // Determine the position of free red players relative to the camera POV
-        val positionAlerts = freeRedPlayers.map { (playerName, redBox) ->
-            val redCenterX = redBox.centerX()
-            val position = when {
-                redCenterX < imageCenterX - imageWidth / 8 -> "Left"
-                redCenterX > imageCenterX + imageWidth / 8 -> "Right"
-                redCenterX == imageCenterX -> "Center"
-                redCenterX < imageCenterX -> "Slightly Left"
-                else -> "Slightly Right"
-            }
-            "$playerName is free and located $position"
-        }
-
-        // Handle no free players case
-        if (positionAlerts.isEmpty()) {
-            Log.d(TAG, "No free red players detected")
-            return "No free red players detected."
-        }
-
-        // Log and return position alerts
-        for (alert in positionAlerts) {
-            Log.d(TAG, alert)
->>>>>>> 08261997be766177e82245a42bc584f02344c598
         }
 
         // Save the processed image
@@ -288,11 +244,7 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
                 processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
             Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
-<<<<<<< HEAD
             return feedback to outputFile.absolutePath
-=======
-            return positionAlerts.joinToString("\n") + "\nSaved at: ${outputFile.absolutePath}"
->>>>>>> 08261997be766177e82245a42bc584f02344c598
         } catch (e: IOException) {
             Log.e(TAG, "Error saving processed image: ${e.message}")
             throw e

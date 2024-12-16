@@ -154,102 +154,110 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             style = android.graphics.Paint.Style.FILL
         }
 
-        val greenPlayers = mutableListOf<Pair<Rect, String>>() // Previously "redPlayers"
-        val redPlayers = mutableListOf<Rect>() // Previously "bluePlayers"
+        val greenPlayers = mutableListOf<Rect>()
+        val redPlayers = mutableListOf<Rect>()
 
-        for ((index, subject) in subjects.withIndex()) {
+        // Separate green and red players based on color analysis
+        for (subject in subjects) {
             val mask = subject.confidenceMask ?: continue
-            val maskWidth = subject.width
-            val maskHeight = subject.height
-            val startX = subject.startX
-            val startY = subject.startY
+            val boundingBox = Rect(subject.startX ?: 0, subject.startY ?: 0, (subject.startX ?: 0) + (subject.width ?: 0), (subject.startY ?: 0) + (subject.height ?: 0))
             mask.rewind()
 
-            var greenCount = 0 // Previously "redCount"
-            var redCount = 0 // Previously "blueCount"
-            val boundingBox = Rect(startX, startY, startX + maskWidth, startY + maskHeight)
-
-            for (y in 0 until maskHeight) {
-                for (x in 0 until maskWidth) {
+            var greenCount = 0
+            var redCount = 0
+            for (y in 0 until (subject.height ?: 0)) {
+                for (x in 0 until (subject.width ?: 0)) {
                     val confidence = mask.get()
                     if (confidence > 0.5f) {
-                        val pixelX = startX + x
-                        val pixelY = startY + y
+                        val pixelX = (subject.startX ?: 0) + x
+                        val pixelY = (subject.startY ?: 0) + y
                         val pixelColor = originalBitmap.getPixel(pixelX, pixelY)
                         val red = android.graphics.Color.red(pixelColor)
                         val green = android.graphics.Color.green(pixelColor)
                         val blue = android.graphics.Color.blue(pixelColor)
 
-                        if (green > red && green > blue) greenCount++ // Previously "red > green && red > blue"
-                        if (red > green && red > blue) redCount++ // Previously "blue > red && blue > green"
+                        if (green > red && green > blue) greenCount++
+                        if (red > green && red > blue) redCount++
                     }
                 }
             }
 
             if (greenCount > redCount) {
-                greenPlayers.add(boundingBox to "Subject $index")
+                greenPlayers.add(boundingBox)
                 paint.color = android.graphics.Color.argb(150, 0, 255, 0) // Green overlay
             } else if (redCount > greenCount) {
                 redPlayers.add(boundingBox)
                 paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
             }
 
-            mask.rewind()
-            for (y in 0 until maskHeight) {
-                for (x in 0 until maskWidth) {
-                    val confidence = mask.get()
-                    if (confidence > 0.5f) {
-                        val pixelX = startX + x
-                        val pixelY = startY + y
-                        canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
-                    }
-                }
-            }
+            // Draw overlay on the canvas
+            canvas.drawRect(boundingBox, paint)
         }
 
-        val freeGreenPlayers = mutableListOf<Pair<String, Rect>>() // Previously "freeRedPlayers"
-        for ((greenBox, playerName) in greenPlayers) {
-            var isCovered = false
-            for (redBox in redPlayers) {
-                if (Rect.intersects(greenBox, redBox)) {
-                    isCovered = true
-                    break
-                }
-            }
-            if (!isCovered) freeGreenPlayers.add(playerName to greenBox)
+        if (greenPlayers.isEmpty()) {
+            return translateFeedback("No players free, keep the ball") to saveProcessedImage(processedBitmap)
         }
 
-        val directions = freeGreenPlayers.map { (playerName, greenBox) ->
-            val greenCenterX = greenBox.centerX()
-            when {
-                greenCenterX < imageCenterX - imageWidth / 8 -> translateFeedback("pass left")
-                greenCenterX > imageCenterX + imageWidth / 8 -> translateFeedback("pass right")
-                greenCenterX == imageCenterX -> translateFeedback("pass forwards")
-                greenCenterX < imageCenterX -> translateFeedback("pass slightly left")
-                else -> translateFeedback("pass slightly right")
+        // Calculate distances for green players
+        val greenPlayerDistances = greenPlayers.map { greenBox ->
+            val minDistances = redPlayers.map { redBox ->
+                distanceBetweenBoxes(greenBox, redBox)
             }
+            greenBox to (minDistances.minOrNull() ?: Float.MAX_VALUE) // If no red players, assign max distance
         }
+
+        // Select the green player based on distance and leftFoot preference
+        val selectedPlayer = greenPlayerDistances
+            .filter { (_, minDistance) -> minDistance > 0 } // Only consider players not covered by red
+            .maxByOrNull { (_, minDistance) -> minDistance } // Furthest green player from red
+
+        // No free green players
+        if (selectedPlayer == null) {
+            return translateFeedback("No players free, keep the ball") to saveProcessedImage(processedBitmap)
+        }
+
+        // Fallback if no red players
+        val fallbackPlayer = if (redPlayers.isEmpty()) {
+            greenPlayers.minByOrNull { greenBox ->
+                val greenCenterX = greenBox.centerX()
+                when {
+                    leftFoot -> Math.abs(greenCenterX - imageCenterX) // Left foot precedence
+                    else -> Math.abs(greenCenterX - imageCenterX) // Right foot precedence
+                }
+            }
+        } else null
+
+        val bestPlayer = selectedPlayer?.first ?: fallbackPlayer
 
         val feedback = when {
-            directions.isEmpty() -> translateFeedback("No players free, keep the ball")
-            directions.size == 1 -> directions[0]
-            else -> directions.joinToString(" or ")
+            bestPlayer!!.centerX() < imageCenterX - imageWidth / 8 -> translateFeedback("pass left")
+            bestPlayer!!.centerX() > imageCenterX + imageWidth / 8 -> translateFeedback("pass right")
+            else -> translateFeedback("pass forwards")
         }
 
+        return feedback to saveProcessedImage(processedBitmap)
+    }
+
+    /**
+     * Helper function to calculate the distance between two bounding boxes.
+     */
+    private fun distanceBetweenBoxes(box1: Rect, box2: Rect): Float {
+        val dx = ((box1?.centerX() ?: 0) - (box2?.centerX() ?: 0)).toFloat()
+        val dy = ((box1?.centerY() ?: 0) - (box2?.centerY() ?: 0)).toFloat()
+        return Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+    }
+
+    /**
+     * Saves the processed bitmap and returns the file path.
+     */
+    private fun saveProcessedImage(processedBitmap: Bitmap): String {
         val publicDirectory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ProcessedImages")
-        if (!publicDirectory.exists()) {
-            publicDirectory.mkdirs()
-        }
-
+        if (!publicDirectory.exists()) publicDirectory.mkdirs()
         val outputFile = File(publicDirectory, "processed_image_${System.currentTimeMillis()}.png")
-        try {
-            FileOutputStream(outputFile).use { out ->
-                processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-            return feedback to outputFile.absolutePath
-        } catch (e: IOException) {
-            throw e
+        FileOutputStream(outputFile).use { out ->
+            processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         }
+        return outputFile.absolutePath
     }
 
     private fun translateFeedback(feedback: String): String {
@@ -259,8 +267,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
                     "pass left" -> "تمرير إلى اليسار"
                     "pass right" -> "تمرير إلى اليمين"
                     "pass forwards" -> "تمرير إلى الأمام"
-                    "pass slightly left" -> "تمرير قليلاً إلى اليسار"
-                    "pass slightly right" -> "تمرير قليلاً إلى اليمين"
                     "No players free, keep the ball" -> "لا يوجد لاعبين أحرار، احتفظ بالكرة"
                     else -> feedback
                 }

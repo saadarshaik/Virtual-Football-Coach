@@ -36,7 +36,7 @@ const CameraScreen: React.FC = () => {
     if (isCapturing) {
       captureInterval = setInterval(() => {
         captureAndProcessImage();
-      }, 3000);
+      }, 1000);
     }
 
     return () => {

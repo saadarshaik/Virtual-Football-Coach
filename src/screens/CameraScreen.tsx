@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, Image, Alert } from 'react-native';
+import { View, StyleSheet, Text, Image, Alert, Button } from 'react-native';
 import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
 import { NativeModules } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -16,20 +16,19 @@ const CameraScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   const [processedImagePath, setProcessedImagePath] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const cameraRef = useRef<Camera>(null);
   const device = useCameraDevice('back');
   const route = useRoute<CameraScreenRouteProp>();
-  const { language } = route.params; // Get language from route params
+  const { language } = route.params;
 
   useEffect(() => {
-    // Set the language in the native module
     SubjectSegmenterModule.setLanguage(language)
       .then(() => console.log(`Language set to ${language}`))
       .catch((error: Error) => console.error('Failed to set language:', error));
   }, [language]);
 
   useEffect(() => {
-    // Request camera permissions
     (async () => {
       const status = await Camera.requestCameraPermission();
       setHasPermission(status === 'granted');
@@ -40,30 +39,29 @@ const CameraScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Set interval to capture and process an image every 3 seconds
-    const interval = setInterval(() => {
-      captureAndProcessImage();
-    }, 3000);
+    let captureInterval: NodeJS.Timeout | null = null;
 
-    return () => clearInterval(interval); // Cleanup on unmount
-  }, []);
+    if (isCapturing) {
+      captureInterval = setInterval(() => {
+        captureAndProcessImage();
+      }, 3000);
+    }
+
+    return () => {
+      if (captureInterval) clearInterval(captureInterval);
+    };
+  }, [isCapturing]);
 
   const captureAndProcessImage = async () => {
     if (cameraRef.current) {
       try {
-        // Capture the photo
         const photo: PhotoFile = await cameraRef.current.takePhoto();
 
-        // Process the image using the native module
         SubjectSegmenterModule.processImage(photo.path)
           .then((result: { feedback: string; filePath: string }) => {
-            setFeedback(result.feedback); // Set feedback for the user
-            setProcessedImagePath(result.filePath); // Display the processed image
-
-            // Clear feedback after 1 second
-            setTimeout(() => {
-              setFeedback(null);
-            }, 1000);
+            setFeedback(result.feedback);
+            setProcessedImagePath(result.filePath);
+            setTimeout(() => setFeedback(null), 1000);
           })
           .catch((error: Error) => {
             Alert.alert('Error', `Failed to process image: ${error.message}`);
@@ -86,7 +84,6 @@ const CameraScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Camera View */}
       <Camera
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
@@ -95,7 +92,6 @@ const CameraScreen: React.FC = () => {
         photo={true}
       />
 
-      {/* Feedback Overlay */}
       {feedback && (
         <View style={styles.feedbackContainer}>
           <Text style={styles.feedbackText}>
@@ -104,13 +100,19 @@ const CameraScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Processed Image Overlay */}
       {processedImagePath && (
         <Image
           source={{ uri: `file://${processedImagePath}` }}
           style={styles.processedImage}
         />
       )}
+
+      <View style={styles.controls}>
+        <Button
+          title={isCapturing ? 'Stop' : 'Start'}
+          onPress={() => setIsCapturing((prev) => !prev)}
+        />
+      </View>
     </View>
   );
 };
@@ -155,6 +157,12 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
+  },
+  controls: {
+    position: 'absolute',
+    bottom: 100,
+    width: '100%',
+    alignItems: 'center',
   },
 });
 

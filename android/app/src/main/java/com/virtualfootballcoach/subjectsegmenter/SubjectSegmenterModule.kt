@@ -23,21 +23,15 @@ class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactConte
             // Set the language dynamically
             processor.setLanguage(language)
 
-            // Call the processor and handle leftFoot logic
-            processor.processImage(imagePath)
+            // Pass the leftFoot parameter to the processor
+            processor.processImage(imagePath, leftFoot)
                 .addOnSuccessListener { result ->
                     val feedback = result.first
                     val filePath = result.second
 
-                    val adjustedFeedback = if (leftFoot) {
-                        "$feedback (Left Foot)"
-                    } else {
-                        "$feedback (Right Foot)"
-                    }
-
                     // Prepare the result map
                     val resultMap = Arguments.createMap()
-                    resultMap.putString("feedback", adjustedFeedback)
+                    resultMap.putString("feedback", feedback)
                     resultMap.putString("filePath", filePath)
 
                     promise.resolve(resultMap)

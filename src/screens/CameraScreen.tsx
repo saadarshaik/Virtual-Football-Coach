@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, Image, Alert, Button } from 'react-native';
+import { View, StyleSheet, Text, Image, Alert, TouchableOpacity } from 'react-native';
 import { Camera, useCameraDevice, PhotoFile } from 'react-native-vision-camera';
-import { NativeModules } from 'react-native';
+import { processImage } from '../utils/nativeModules.ts'; // Import the bridge function
 import { useRoute, RouteProp } from '@react-navigation/native';
 
-const { SubjectSegmenterModule } = NativeModules;
-
 type RootStackParamList = {
-  CameraScreen: { language: 'en' | 'ar' };
+  CameraScreen: { language: 'en' | 'ar'; left_foot: boolean };
 };
 
 type CameraScreenRouteProp = RouteProp<RootStackParamList, 'CameraScreen'>;
@@ -20,13 +18,7 @@ const CameraScreen: React.FC = () => {
   const cameraRef = useRef<Camera>(null);
   const device = useCameraDevice('back');
   const route = useRoute<CameraScreenRouteProp>();
-  const { language } = route.params;
-
-  useEffect(() => {
-    SubjectSegmenterModule.setLanguage(language)
-      .then(() => console.log(`Language set to ${language}`))
-      .catch((error: Error) => console.error('Failed to set language:', error));
-  }, [language]);
+  const { language, left_foot } = route.params;
 
   useEffect(() => {
     (async () => {
@@ -57,17 +49,15 @@ const CameraScreen: React.FC = () => {
       try {
         const photo: PhotoFile = await cameraRef.current.takePhoto();
 
-        SubjectSegmenterModule.processImage(photo.path)
-          .then((result: { feedback: string; filePath: string }) => {
-            setFeedback(result.feedback);
-            setProcessedImagePath(result.filePath);
-            setTimeout(() => setFeedback(null), 1000);
-          })
-          .catch((error: Error) => {
-            Alert.alert('Error', `Failed to process image: ${error.message}`);
-          });
+        // Call the bridge function instead of native module directly
+        const result = await processImage(photo.path, language, left_foot);
+        setFeedback(result.feedback);
+        setProcessedImagePath(result.filePath);
+
+        // Clear feedback after 1 second
+        setTimeout(() => setFeedback(null), 1000);
       } catch (error) {
-        Alert.alert('Error', 'Failed to capture photo.');
+        Alert.alert('Error', `Failed to process image: ${error.message}`);
       }
     }
   };
@@ -92,6 +82,7 @@ const CameraScreen: React.FC = () => {
         photo={true}
       />
 
+      {/* Display feedback */}
       {feedback && (
         <View style={styles.feedbackContainer}>
           <Text style={styles.feedbackText}>
@@ -100,6 +91,7 @@ const CameraScreen: React.FC = () => {
         </View>
       )}
 
+      {/* Display processed image */}
       {processedImagePath && (
         <Image
           source={{ uri: `file://${processedImagePath}` }}
@@ -107,11 +99,22 @@ const CameraScreen: React.FC = () => {
         />
       )}
 
+      {/* Start/Stop Button */}
       <View style={styles.controls}>
-        <Button
-          title={isCapturing ? 'Stop' : 'Start'}
+        <TouchableOpacity
+          style={styles.startButton}
           onPress={() => setIsCapturing((prev) => !prev)}
-        />
+        >
+          <Text style={styles.startButtonText}>
+            {isCapturing
+              ? language === 'en'
+                ? 'Stop'
+                : 'توقف'
+              : language === 'en'
+              ? 'Start'
+              : 'ابدأ'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -163,6 +166,19 @@ const styles = StyleSheet.create({
     bottom: 100,
     width: '100%',
     alignItems: 'center',
+  },
+  startButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(0, 255, 0, 0.3)', // Green translucent background
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  startButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF', // White text
   },
 });
 

@@ -37,6 +37,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
     private var textToSpeech: TextToSpeech? = null
     private var currentLanguage: Locale = Locale.US // Default to English
 
+    private var leftFoot: Boolean = false // New variable to store the leftFoot value
+
     init {
         // Initialize Text-to-Speech
         textToSpeech = TextToSpeech(context, this)
@@ -66,8 +68,12 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         }
     }
 
-    fun processImage(imagePath: String): Task<Pair<String, String>> {
-        Log.d(TAG, "Starting processImage for path: $imagePath")
+    /**
+     * Process the image with the leftFoot flag.
+     */
+    fun processImage(imagePath: String, leftFoot: Boolean): Task<Pair<String, String>> {
+        this.leftFoot = leftFoot // Set the leftFoot value
+        Log.d(TAG, "Starting processImage for path: $imagePath, Left Foot: $leftFoot")
 
         val originalBitmap = fixImageRotation(imagePath, targetWidth = 640, targetHeight = 480)
             ?: throw IOException("Invalid image path or format")

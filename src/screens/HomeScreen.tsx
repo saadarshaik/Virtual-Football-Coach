@@ -104,7 +104,7 @@ const HomeScreen: React.FC = () => {
           onPress={() =>
             navigation.navigate('CameraScreen', {
               language,
-              left_foot: leftFoot,
+              left_foot: !leftFoot,
             })
           }
         >

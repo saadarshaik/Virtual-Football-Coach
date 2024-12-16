@@ -19,7 +19,7 @@ const App: React.FC = () => {
         screenOptions={{
           headerBackground: () => (
             <ImageBackground
-              source={require('./assets/man_united_wallpaper.png')} // Path to your wallpaper image
+              source={require('./assets/saudi_logo.jpeg')} // Path to your wallpaper image
               style={styles.headerBackground}
               resizeMode="cover"
             />

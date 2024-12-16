@@ -55,10 +55,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         }
     }
 
-    /**
-     * Dynamically change the Text-to-Speech language
-     * @param languageCode ISO 639 language code (e.g., "en" for English, "ar" for Arabic)
-     */
     fun setLanguage(languageCode: String) {
         val locale = Locale(languageCode)
         val result = textToSpeech?.setLanguage(locale)
@@ -73,25 +69,16 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
     fun processImage(imagePath: String): Task<Pair<String, String>> {
         Log.d(TAG, "Starting processImage for path: $imagePath")
 
-        // Load and resize the image with rotation correction
         val originalBitmap = fixImageRotation(imagePath, targetWidth = 640, targetHeight = 480)
-        if (originalBitmap == null) {
-            Log.e(TAG, "Failed to decode image at path: $imagePath")
-            throw IOException("Invalid image path or format")
-        }
-        Log.d(TAG, "Original image loaded successfully: ${originalBitmap.width}x${originalBitmap.height}")
+            ?: throw IOException("Invalid image path or format")
 
         val inputImage = InputImage.fromBitmap(originalBitmap, 0)
-        Log.d(TAG, "InputImage created successfully")
 
         return subjectSegmenter.process(inputImage)
             .continueWithTask(executor) { task ->
                 val segmentationResult = task.result ?: throw Exception("Segmentation failed")
-                Log.d(TAG, "Segmentation completed successfully")
-
                 val (feedback, processedImagePath) = processSegmentationResult(segmentationResult, originalBitmap)
 
-                // Speak only the feedback
                 textToSpeech?.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null)
 
                 Tasks.forResult(feedback to processedImagePath)
@@ -102,10 +89,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(imagePath, options)
 
-        // Calculate the scaling factor
         val scaleFactor = Math.max(options.outWidth / targetWidth, options.outHeight / targetHeight)
 
-        // Decode the image with scaling
         val resizedOptions = BitmapFactory.Options().apply {
             inSampleSize = scaleFactor
             inScaled = true
@@ -157,16 +142,14 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
         Log.d(TAG, "Number of subjects: ${subjects.size}")
 
-        // Create a mutable copy of the original image for overlay
         val processedBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
-
         val canvas = android.graphics.Canvas(processedBitmap)
         val paint = android.graphics.Paint().apply {
             style = android.graphics.Paint.Style.FILL
         }
 
-        val redPlayers = mutableListOf<Pair<Rect, String>>()
-        val bluePlayers = mutableListOf<Rect>()
+        val greenPlayers = mutableListOf<Pair<Rect, String>>() // Previously "redPlayers"
+        val redPlayers = mutableListOf<Rect>() // Previously "bluePlayers"
 
         for ((index, subject) in subjects.withIndex()) {
             val mask = subject.confidenceMask ?: continue
@@ -176,8 +159,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             val startY = subject.startY
             mask.rewind()
 
-            var redCount = 0
-            var blueCount = 0
+            var greenCount = 0 // Previously "redCount"
+            var redCount = 0 // Previously "blueCount"
             val boundingBox = Rect(startX, startY, startX + maskWidth, startY + maskHeight)
 
             for (y in 0 until maskHeight) {
@@ -191,67 +174,52 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
                         val green = android.graphics.Color.green(pixelColor)
                         val blue = android.graphics.Color.blue(pixelColor)
 
-                        if (red > green && red > blue) redCount++
-                        if (blue > red && blue > green) blueCount++
+                        if (green > red && green > blue) greenCount++ // Previously "red > green && red > blue"
+                        if (red > green && red > blue) redCount++ // Previously "blue > red && blue > green"
                     }
                 }
             }
 
-            if (redCount > blueCount) {
-                redPlayers.add(boundingBox to "Subject $index")
+            if (greenCount > redCount) {
+                greenPlayers.add(boundingBox to "Subject $index")
+                paint.color = android.graphics.Color.argb(150, 0, 255, 0) // Green overlay
+            } else if (redCount > greenCount) {
+                redPlayers.add(boundingBox)
                 paint.color = android.graphics.Color.argb(150, 255, 0, 0) // Red overlay
-                mask.rewind()
-                for (y in 0 until maskHeight) {
-                    for (x in 0 until maskWidth) {
-                        val confidence = mask.get()
-                        if (confidence > 0.5f) {
-                            val pixelX = startX + x
-                            val pixelY = startY + y
-                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
-                        }
+            }
+
+            mask.rewind()
+            for (y in 0 until maskHeight) {
+                for (x in 0 until maskWidth) {
+                    val confidence = mask.get()
+                    if (confidence > 0.5f) {
+                        val pixelX = startX + x
+                        val pixelY = startY + y
+                        canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
                     }
                 }
-                Log.d(TAG, "Red player detected: Subject $index")
-            } else if (blueCount > redCount) {
-                bluePlayers.add(boundingBox)
-                paint.color = android.graphics.Color.argb(150, 0, 0, 255) // Blue overlay
-                mask.rewind()
-                for (y in 0 until maskHeight) {
-                    for (x in 0 until maskWidth) {
-                        val confidence = mask.get()
-                        if (confidence > 0.5f) {
-                            val pixelX = startX + x
-                            val pixelY = startY + y
-                            canvas.drawPoint(pixelX.toFloat(), pixelY.toFloat(), paint)
-                        }
-                    }
-                }
-                Log.d(TAG, "Blue player detected: Subject $index")
             }
         }
 
-        val freeRedPlayers = mutableListOf<Pair<String, Rect>>()
-        for ((redBox, playerName) in redPlayers) {
+        val freeGreenPlayers = mutableListOf<Pair<String, Rect>>() // Previously "freeRedPlayers"
+        for ((greenBox, playerName) in greenPlayers) {
             var isCovered = false
-            for (blueBox in bluePlayers) {
-                if (Rect.intersects(redBox, blueBox)) {
+            for (redBox in redPlayers) {
+                if (Rect.intersects(greenBox, redBox)) {
                     isCovered = true
-                    Log.d(TAG, "$playerName is covered by a blue player")
                     break
                 }
             }
-            if (!isCovered) {
-                freeRedPlayers.add(playerName to redBox)
-            }
+            if (!isCovered) freeGreenPlayers.add(playerName to greenBox)
         }
 
-        val directions = freeRedPlayers.map { (playerName, redBox) ->
-            val redCenterX = redBox.centerX()
+        val directions = freeGreenPlayers.map { (playerName, greenBox) ->
+            val greenCenterX = greenBox.centerX()
             when {
-                redCenterX < imageCenterX - imageWidth / 8 -> translateFeedback("pass left")
-                redCenterX > imageCenterX + imageWidth / 8 -> translateFeedback("pass right")
-                redCenterX == imageCenterX -> translateFeedback("pass forwards")
-                redCenterX < imageCenterX -> translateFeedback("pass slightly left")
+                greenCenterX < imageCenterX - imageWidth / 8 -> translateFeedback("pass left")
+                greenCenterX > imageCenterX + imageWidth / 8 -> translateFeedback("pass right")
+                greenCenterX == imageCenterX -> translateFeedback("pass forwards")
+                greenCenterX < imageCenterX -> translateFeedback("pass slightly left")
                 else -> translateFeedback("pass slightly right")
             }
         }
@@ -262,11 +230,9 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             else -> directions.joinToString(" or ")
         }
 
-        // Save the processed image
         val publicDirectory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ProcessedImages")
         if (!publicDirectory.exists()) {
             publicDirectory.mkdirs()
-            Log.d(TAG, "Created directory: ${publicDirectory.absolutePath}")
         }
 
         val outputFile = File(publicDirectory, "processed_image_${System.currentTimeMillis()}.png")
@@ -274,10 +240,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             FileOutputStream(outputFile).use { out ->
                 processedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
-            Log.d(TAG, "Processed image saved successfully at: ${outputFile.absolutePath}")
             return feedback to outputFile.absolutePath
         } catch (e: IOException) {
-            Log.e(TAG, "Error saving processed image: ${e.message}")
             throw e
         }
     }
@@ -292,10 +256,10 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
                     "pass slightly left" -> "تمرير قليلاً إلى اليسار"
                     "pass slightly right" -> "تمرير قليلاً إلى اليمين"
                     "No players free, keep the ball" -> "لا يوجد لاعبين أحرار، احتفظ بالكرة"
-                    else -> feedback // Default to original if not translated
+                    else -> feedback
                 }
             }
-            else -> feedback // Default to English
+            else -> feedback
         }
     }
 

@@ -5,8 +5,6 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Arguments
-import com.google.android.gms.tasks.OnFailureListener
-import com.google.android.gms.tasks.OnSuccessListener
 
 class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
@@ -16,20 +14,33 @@ class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactConte
         return "SubjectSegmenterModule"
     }
 
+    /**
+     * Process an image with additional parameters: language and leftFoot
+     */
     @ReactMethod
-    fun processImage(imagePath: String, promise: Promise) {
+    fun processImage(imagePath: String, language: String, leftFoot: Boolean, promise: Promise) {
         try {
+            // Set the language dynamically
+            processor.setLanguage(language)
+
+            // Call the processor and handle leftFoot logic
             processor.processImage(imagePath)
                 .addOnSuccessListener { result ->
-                    val feedback = result.first // Extract feedback
-                    val filePath = result.second // Extract file path
+                    val feedback = result.first
+                    val filePath = result.second
 
-                    // Create a WritableMap to pass both feedback and filePath
+                    val adjustedFeedback = if (leftFoot) {
+                        "$feedback (Left Foot)"
+                    } else {
+                        "$feedback (Right Foot)"
+                    }
+
+                    // Prepare the result map
                     val resultMap = Arguments.createMap()
-                    resultMap.putString("feedback", feedback)
+                    resultMap.putString("feedback", adjustedFeedback)
                     resultMap.putString("filePath", filePath)
 
-                    promise.resolve(resultMap) // Return the map to React Native
+                    promise.resolve(resultMap)
                 }
                 .addOnFailureListener { exception ->
                     promise.reject("ProcessImageError", exception.message, exception)
@@ -39,6 +50,9 @@ class SubjectSegmenterModule(reactContext: ReactApplicationContext) : ReactConte
         }
     }
 
+    /**
+     * Set the language dynamically
+     */
     @ReactMethod
     fun setLanguage(languageCode: String, promise: Promise) {
         try {

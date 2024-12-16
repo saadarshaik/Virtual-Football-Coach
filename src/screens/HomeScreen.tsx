@@ -49,22 +49,22 @@ const HomeScreen: React.FC = () => {
               {language === 'en' ? 'Your Team Colour:' : 'لون فريقك:'}
             </Text>
           </View>
-          <View style={[styles.textBox, styles.greenBox]}>
-            <Text style={styles.teamName}>
+          <View style={[styles.textBox, styles.teamColourBox]}>
+            <Text style={[styles.teamColourText, { color: '#00FF00' }]}>
               {language === 'en' ? 'GREEN' : 'أخضر'}
             </Text>
           </View>
         </View>
 
         {/* Opponent Team Colour */}
-        <View style={styles.teamContainer}>
+        <View style={[styles.teamContainer, language === 'ar' && styles.teamContainerRtl]}>
           <View style={styles.textBox}>
             <Text style={styles.teamLabel}>
               {language === 'en' ? 'Opponent Team Colour:' : 'لون الفريق الخصم:'}
             </Text>
           </View>
-          <View style={[styles.textBox, styles.redBox]}>
-            <Text style={styles.teamName}>
+          <View style={[styles.textBox, styles.teamColourBox]}>
+            <Text style={[styles.teamColourText, { color: '#FF0000' }]}>
               {language === 'en' ? 'RED' : 'أحمر'}
             </Text>
           </View>
@@ -166,19 +166,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#FFFFFF', // White text
   },
-  teamName: {
+  teamColourBox: {
+    marginLeft: 10,
+    marginRight: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  teamColourText: {
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  greenBox: {
-    marginLeft: 10,
-    marginRight: 10,
-    color: '#00FF00', // Bright green
-  },
-  redBox: {
-    marginLeft: 10,
-    marginRight: 10,
-    color: '#FF0000', // Bright red
   },
   button: {
     marginBottom: 10,

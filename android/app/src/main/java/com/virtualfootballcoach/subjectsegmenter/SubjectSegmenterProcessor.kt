@@ -209,8 +209,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             greenPlayers.minByOrNull { greenBox ->
                 val greenCenterX = greenBox.centerX()
                 when {
-                    leftFoot -> Math.abs(greenCenterX - imageCenterX) // Left foot precedence
-                    else -> Math.abs(greenCenterX - imageCenterX) // Right foot precedence
+                    leftFoot -> Math.abs(greenCenterX - (imageCenterX - imageWidth / 4)) // Left foot precedence
+                    else -> Math.abs(greenCenterX - (imageCenterX + imageWidth / 4)) // Right foot precedence
                 }
             }
         } else null

@@ -16,14 +16,9 @@ export const processImage = async (
   language: 'en' | 'ar',
   leftFoot: boolean
 ): Promise<{ feedback: string; filePath: string }> => {
-  console.log('Starting image processing for:', imagePath);
-  console.log('Language:', language);
-  console.log('Left Foot:', leftFoot);
 
   try {
     const result = await SubjectSegmenterModule.processImage(imagePath, language, leftFoot);
-    console.log('Feedback:', result.feedback);
-    console.log('Processed Image Path:', result.filePath);
     return result;
   } catch (error) {
     console.error('Error processing image:', error);

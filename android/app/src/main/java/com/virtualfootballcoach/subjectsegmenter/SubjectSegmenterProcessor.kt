@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.speech.tts.TextToSpeech
-import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
@@ -48,12 +47,9 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         if (status == TextToSpeech.SUCCESS) {
             val result = textToSpeech?.setLanguage(currentLanguage)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.e(TAG, "Language not supported: $currentLanguage")
             } else {
-                Log.d(TAG, "Text-to-Speech initialized successfully with language: $currentLanguage")
             }
         } else {
-            Log.e(TAG, "Failed to initialize Text-to-Speech")
         }
     }
 
@@ -61,10 +57,8 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         val locale = Locale(languageCode)
         val result = textToSpeech?.setLanguage(locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.e(TAG, "Language not supported: $languageCode")
         } else {
             currentLanguage = locale
-            Log.d(TAG, "Language set to: $languageCode")
         }
     }
 
@@ -73,7 +67,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
      */
     fun processImage(imagePath: String, leftFoot: Boolean): Task<Pair<String, String>> {
         this.leftFoot = leftFoot // Set the leftFoot value
-        Log.d(TAG, "Starting processImage for path: $imagePath, Left Foot: $leftFoot")
 
         val originalBitmap = fixImageRotation(imagePath, targetWidth = 640, targetHeight = 480)
             ?: throw IOException("Invalid image path or format")
@@ -103,7 +96,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         }
         val bitmap = BitmapFactory.decodeFile(imagePath, resizedOptions)
         if (bitmap == null) {
-            Log.e(TAG, "Unable to decode image at path: $imagePath")
             return null
         }
 
@@ -124,13 +116,11 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
             if (rotationDegrees != 0f) {
                 val matrix = android.graphics.Matrix()
                 matrix.postRotate(rotationDegrees)
-                Log.d(TAG, "Rotating image by $rotationDegrees degrees")
                 return Bitmap.createBitmap(
                     bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
                 )
             }
         } catch (e: IOException) {
-            Log.e(TAG, "Error reading EXIF data: ${e.message}")
         }
 
         return bitmap
@@ -145,8 +135,6 @@ class SubjectSegmenterProcessor(private val context: Context) : TextToSpeech.OnI
         val imageHeight = originalBitmap.height
         val imageCenterX = imageWidth / 2
 
-        Log.d(TAG, "Processing segmentation result. Image dimensions: ${imageWidth}x${imageHeight}")
-        Log.d(TAG, "Number of subjects: ${subjects.size}")
 
         val processedBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = android.graphics.Canvas(processedBitmap)
